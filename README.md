@@ -20,6 +20,7 @@ This repository contains the initial Next.js 15 web app: a foundation with the k
   - Economic and community impact, timeline, lobbying, coalitions, sentiment, constitutional notes
 - **Political Athletes** (`/politicians`, `/politicians/[id]`) — scoreboard plus athlete profiles with promise tracker, scorecard, top donors, recent votes.
 - **Issues** (`/issues`, `/issues/[slug]`) — issue lenses connecting bills and politicians.
+- **Civic Profile** (`/profile`) — view, edit, and clear your personalization. Profile is stored in `localStorage` only; nothing transits a server in this preview.
 
 ## Tech
 
@@ -34,15 +35,14 @@ Editorial, calm, premium. References: Apple News, Bloomberg, Stripe, Linear, Not
 
 ## Wiring real Claude calls
 
-API routes in `app/api/tldr/route.ts` and `app/api/relevant/route.ts` ship with deterministic, well-written canned responses. To swap in live Claude calls:
+The API routes at `/api/tldr` and `/api/relevant` are progressively enhanced. When `ANTHROPIC_API_KEY` is set, they call Claude Sonnet 4.6 directly via the Messages API (`lib/claude.ts`). When the key is absent, they fall back to deterministic canned responses. The same payload shape is returned either way, so the client never needs to care.
 
 ```bash
 cp .env.example .env.local
-# add your ANTHROPIC_API_KEY
-npm install @anthropic-ai/sdk
+# add your ANTHROPIC_API_KEY — no install required, we use fetch directly
 ```
 
-Then in each route, replace the `CANNED` lookup with an Anthropic Messages API call. Use Claude Sonnet 4.6 (`claude-sonnet-4-6`) or Haiku 4.5 (`claude-haiku-4-5-20251001`) for latency-sensitive paths.
+For latency-sensitive paths, swap `DEFAULT_MODEL` in `lib/claude.ts` to `claude-haiku-4-5-20251001`.
 
 ## Run it
 

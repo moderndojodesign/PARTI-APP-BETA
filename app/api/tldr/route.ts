@@ -1,12 +1,6 @@
 import { NextResponse } from "next/server";
 import { getBill } from "@/lib/data/bills";
-
-// Claude-ready stub. To wire this to a live model:
-// 1. Set ANTHROPIC_API_KEY in .env.local
-// 2. Replace the canned response below with an Anthropic Messages API call
-//    using the bill.summaryPlain, bill.problem, intended, and unintended
-//    fields as the input to a "produce a 2-3 sentence TL;DR in PARTI's
-//    calm editorial voice" system prompt.
+import { callClaude, hasClaudeKey } from "@/lib/claude";
 
 export async function POST(req: Request) {
   try {
@@ -19,20 +13,36 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Bill not found" }, { status: 404 });
     }
 
-    const tldr = await generateTldr(bill);
-    return NextResponse.json({ tldr });
-  } catch (e) {
+    if (hasClaudeKey()) {
+      const live = await callClaude({
+        system:
+          "You write TL;DR summaries for PARTI, a civic operating system. Voice: calm, editorial, plainspoken, non-partisan, never sensational. Write 2-3 sentences, max 60 words. Lead with what the bill actually does, not procedural status. No bullet points, no headers.",
+        messages: [
+          {
+            role: "user",
+            content: [
+              `Bill: ${bill.number} — ${bill.title}`,
+              `Status: ${bill.status} in the ${bill.chamber}`,
+              `Plain summary: ${bill.summaryPlain}`,
+              `Problem: ${bill.problem}`,
+              `Intended consequences: ${bill.intended.join("; ")}`,
+              "Write the TL;DR.",
+            ].join("\n\n"),
+          },
+        ],
+        maxTokens: 240,
+      });
+      if (live) return NextResponse.json({ tldr: live, source: "claude" });
+    }
+
+    const tldr = canned(bill.id) ?? fallback(bill);
+    return NextResponse.json({ tldr, source: "canned" });
+  } catch {
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
 
-async function generateTldr(bill: ReturnType<typeof getBill>) {
-  if (!bill) return "";
-  // Brief simulated latency to mimic model call.
-  await new Promise((r) => setTimeout(r, 450));
-
-  // Canned editorial TL;DRs, one per bill. When you wire Claude in, this
-  // becomes the model output and the canned text becomes the fallback.
+function canned(id: string): string | null {
   const CANNED: Record<string, string> = {
     "hr-2847":
       "If your city legalizes duplexes and small apartment buildings near transit, it qualifies for expanded federal housing funding. The bill aims to ease the housing shortage that drives rent and home prices — with tenant protections built in to limit displacement.",
@@ -45,9 +55,9 @@ async function generateTldr(bill: ReturnType<typeof getBill>) {
     "s-887":
       "Small businesses get a permanently higher equipment-expensing limit, lighter federal reporting burdens, and a modernized SBA lending program. Designed to lower friction for firms under 50 employees.",
   };
+  return CANNED[id] ?? null;
+}
 
-  return (
-    CANNED[bill.id] ??
-    `${bill.oneLiner} The bill is currently ${bill.status.toLowerCase()} in the ${bill.chamber}.`
-  );
+function fallback(bill: NonNullable<ReturnType<typeof getBill>>) {
+  return `${bill.oneLiner} The bill is currently ${bill.status.toLowerCase()} in the ${bill.chamber}.`;
 }

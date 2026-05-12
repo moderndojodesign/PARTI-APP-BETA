@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useProfile, type CivicScope } from "@/lib/profile";
 
 type RelevanceResponse = {
   headline: string;
@@ -8,14 +9,32 @@ type RelevanceResponse = {
   scope: string;
 };
 
+const FORM_SCOPES: CivicScope[] = [
+  "Neighborhood",
+  "Municipality",
+  "County",
+  "State",
+  "National",
+];
+
 export function RelevancePanel({ billId }: { billId: string }) {
+  const { profile, hydrated } = useProfile();
   const [zip, setZip] = useState("");
   const [profession, setProfession] = useState("");
-  const [scope, setScope] = useState<"Neighborhood" | "Municipality" | "County" | "State" | "National">(
-    "Municipality"
-  );
+  const [scope, setScope] = useState<CivicScope>("Municipality");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<RelevanceResponse | null>(null);
+  const [prefilled, setPrefilled] = useState(false);
+
+  useEffect(() => {
+    if (!hydrated || prefilled) return;
+    if (profile) {
+      setZip(profile.zip);
+      if (profile.profession) setProfession(profile.profession);
+      if (profile.scope !== "Global") setScope(profile.scope);
+    }
+    setPrefilled(true);
+  }, [hydrated, profile, prefilled]);
 
   async function makeRelevant(e: React.FormEvent) {
     e.preventDefault();
@@ -50,9 +69,14 @@ export function RelevancePanel({ billId }: { billId: string }) {
           </div>
           <p className="mt-1.5 body-sm max-w-prose">
             PARTI translates this legislation through the lens of your geography
-            and profession. Nothing here is stored.
+            and profession.
           </p>
         </div>
+        {hydrated && profile && (
+          <span className="ui-label hidden md:inline">
+            Prefilled from your profile
+          </span>
+        )}
       </div>
 
       <form
@@ -75,8 +99,8 @@ export function RelevancePanel({ billId }: { billId: string }) {
         <LabeledSelect
           label="Civic scope"
           value={scope}
-          onChange={(v) => setScope(v as typeof scope)}
-          options={["Neighborhood", "Municipality", "County", "State", "National"]}
+          onChange={(v) => setScope(v as CivicScope)}
+          options={FORM_SCOPES}
         />
         <div className="flex items-end">
           <button type="submit" className="btn-primary w-full md:w-auto" disabled={loading}>

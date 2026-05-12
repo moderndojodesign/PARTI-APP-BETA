@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Wordmark } from "./wordmark";
+import { NavProfileChip } from "./nav-profile-chip";
 
 const NAV = [
   { href: "/briefing", label: "Briefing" },
@@ -30,9 +31,7 @@ export function SiteNav() {
           ))}
         </nav>
         <div className="flex items-center gap-2">
-          <Link href="/onboarding" className="btn-secondary hidden md:inline-flex">
-            Personalize
-          </Link>
+          <NavProfileChip />
           <Link href="/briefing" className="btn-primary">
             Open PARTI
           </Link>

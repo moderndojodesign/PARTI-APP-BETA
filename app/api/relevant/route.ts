@@ -1,18 +1,19 @@
 import { NextResponse } from "next/server";
 import { getBill } from "@/lib/data/bills";
-
-// Claude-ready stub. To wire this to a live model:
-// 1. Set ANTHROPIC_API_KEY in .env.local
-// 2. Replace generateRelevance() with an Anthropic Messages API call.
-//    Pass: bill summary + framing, plus { zip, profession, scope } as user
-//    context. Ask the model for { headline, bullets[], scope } JSON in PARTI's
-//    calm editorial voice. Validate the schema before returning.
+import { callClaude, hasClaudeKey } from "@/lib/claude";
 
 type Body = {
   billId?: string;
   zip?: string;
   profession?: string;
   scope?: "Neighborhood" | "Municipality" | "County" | "State" | "National";
+};
+
+type RelevanceResult = {
+  headline: string;
+  bullets: string[];
+  scope: string;
+  source: "claude" | "canned";
 };
 
 export async function POST(req: Request) {
@@ -31,19 +32,77 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Bill not found" }, { status: 404 });
     }
 
-    const result = await generateRelevance(bill, { zip, profession, scope });
-    return NextResponse.json(result);
+    if (hasClaudeKey()) {
+      const live = await callClaudeRelevance(bill, { zip, profession, scope });
+      if (live) return NextResponse.json(live);
+    }
+
+    return NextResponse.json(generateCanned(bill, { zip, profession, scope }));
   } catch {
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
 
-async function generateRelevance(
+async function callClaudeRelevance(
   bill: NonNullable<ReturnType<typeof getBill>>,
   ctx: { zip: string; profession: string; scope: string }
-) {
-  await new Promise((r) => setTimeout(r, 700));
+): Promise<RelevanceResult | null> {
+  const text = await callClaude({
+    system:
+      'You translate legislation through a citizen\'s personal context for PARTI, a civic operating system. Voice: calm, editorial, plainspoken, non-partisan. Output strict JSON with this shape: {"headline": string, "bullets": string[]}. Provide 3-5 concrete, specific bullets. Each bullet under 35 words. No hedging filler. No partisan framing.',
+    messages: [
+      {
+        role: "user",
+        content: [
+          `Bill: ${bill.number} — ${bill.title}`,
+          `Plain summary: ${bill.summaryPlain}`,
+          `Problem: ${bill.problem}`,
+          `Intended: ${bill.intended.join("; ")}`,
+          `Unintended: ${bill.unintended.join("; ")}`,
+          `Economic impact: ${bill.economicImpact}`,
+          `Community impact: ${bill.communityImpact}`,
+          "",
+          `Reader context:`,
+          `ZIP: ${ctx.zip || "unspecified"}`,
+          `Profession: ${ctx.profession || "unspecified"}`,
+          `Civic scope: ${ctx.scope}`,
+          "",
+          "Return JSON only.",
+        ].join("\n"),
+      },
+    ],
+    maxTokens: 700,
+  });
 
+  if (!text) return null;
+  try {
+    const json = JSON.parse(extractJson(text)) as {
+      headline?: string;
+      bullets?: string[];
+    };
+    if (!json.headline || !Array.isArray(json.bullets)) return null;
+    return {
+      headline: json.headline,
+      bullets: json.bullets.slice(0, 6),
+      scope: ctx.scope,
+      source: "claude",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function extractJson(s: string) {
+  const start = s.indexOf("{");
+  const end = s.lastIndexOf("}");
+  if (start === -1 || end === -1) return s;
+  return s.slice(start, end + 1);
+}
+
+function generateCanned(
+  bill: NonNullable<ReturnType<typeof getBill>>,
+  ctx: { zip: string; profession: string; scope: string }
+): RelevanceResult {
   const where = ctx.zip ? `ZIP ${ctx.zip}` : "your area";
   const who = ctx.profession ? ` and people working as a ${ctx.profession.toLowerCase()}` : "";
 
@@ -98,5 +157,6 @@ async function generateRelevance(
         `Implementation will depend on action from state and local officials.`,
       ],
     scope: ctx.scope,
+    source: "canned",
   };
 }

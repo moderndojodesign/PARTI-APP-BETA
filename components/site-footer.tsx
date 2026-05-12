@@ -20,6 +20,7 @@ export function SiteFooter() {
             ["Legislation", "/bills"],
             ["Politicians", "/politicians"],
             ["Issues", "/issues"],
+            ["Civic Profile", "/profile"],
           ]}
         />
         <FooterCol

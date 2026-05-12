@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useState } from "react";
 import { ISSUES } from "@/lib/data/issues";
 import { cx } from "@/lib/utils";
+import { saveProfile, type CivicScope } from "@/lib/profile";
+import type { IssueTag } from "@/lib/types";
 
-type Scope = "Neighborhood" | "Municipality" | "County" | "State" | "National" | "Global";
+type Scope = CivicScope;
 const SCOPES: Scope[] = ["Neighborhood", "Municipality", "County", "State", "National", "Global"];
 
 export function OnboardingFlow() {
@@ -193,7 +195,18 @@ export function OnboardingFlow() {
           </button>
           <button
             type="button"
-            onClick={() => canAdvance && setStep((s) => ((s + 1) as 2 | 3 | 4))}
+            onClick={() => {
+              if (!canAdvance) return;
+              const next = (step + 1) as 2 | 3 | 4;
+              if (next === 4) {
+                saveProfile({
+                  interests: Array.from(interests) as IssueTag[],
+                  zip,
+                  scope,
+                });
+              }
+              setStep(next);
+            }}
             className="btn-primary disabled:opacity-40"
             disabled={!canAdvance}
           >
